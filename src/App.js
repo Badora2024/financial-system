@@ -462,15 +462,25 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
         </div>
       </Card>
       <Card><SecHead title="المبالغ المالية" color={color} icon="💰"/>
-        <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
+        <div style={{
+          display:"grid",
+          gridTemplateColumns:"repeat(auto-fit,minmax(220px,1fr))",
+          gap:14,
+          alignItems:"end"
+        }}>
           <Field label="مبالغ الديوان (د.ك)" type="number" value={d.amountDiwan} onChange={set("amountDiwan")}/>
           <SelectField label="عملة الملحق الثقافي" value={selectedAttacheCurrency} onChange={setAttacheCurrency} options={CURRENCY_OPTIONS} wide/>
+          <Field label="مبلغ الملحق الثقافي" type="number" value={d.amountAttache} onChange={set("amountAttache")} placeholder={`بالـ ${res.attacheCurrency || getAttacheCurrencyCode(d)}`}/>
           {selectedAttacheCurrency === "OTHER"&&<Field label="رمز العملة" value={d.attacheCurrencyOther} onChange={set("attacheCurrencyOther")} placeholder="مثال: MXN"/>}
-          <Field label={`مبالغ الملحق الثقافي (${res.attacheCurrency || getAttacheCurrencyCode(d)})`} type="number" value={d.amountAttache} onChange={set("amountAttache")}/>
           <Field label={selectedAttacheCurrency === "KWD" ? "سعر الصرف (تلقائي)" : "سعر الصرف مقابل الدينار"} type="number" value={selectedAttacheCurrency === "KWD" ? "1" : d.exchangeRate} onChange={selectedAttacheCurrency === "KWD" ? ()=>{} : set("exchangeRate")} placeholder="0.336924"/>
           <Field label="المستحق 100% (د.ك)" type="number" value={d.fullDebtAmount} onChange={set("fullDebtAmount")} placeholder="0"/>
         </div>
-        {res.totalKWD>0&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+        {res.totalKWD>0&&<div style={{
+          marginTop:14,
+          display:"grid",
+          gridTemplateColumns:"repeat(auto-fit,minmax(260px,1fr))",
+          gap:10
+        }}>
           <ResBox label="يعادل مبلغ الملحق بالدينار الكويتي" value={fmt(res.attacheAmountKWD)} color={C.gold}/>
           <ResBox label="إجمالي المبلغ بالدينار الكويتي" value={fmt(res.totalKWD)} color={color}/>
           {res.fullDebtAmount>0&&<ResBox label="المستحق 100%" value={fmt(res.fullDebtAmount)} color={C.gold}/>} 
