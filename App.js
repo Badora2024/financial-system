@@ -4,46 +4,212 @@ import {
   fetchCashRecords, saveCashRecord, updateCashRecord, deleteCashRecord,
 } from "./supabase";
 
+// ==================== ENGLISH DIGITS HELPERS ====================
+const AR_KW_LATN = "ar-KW-u-nu-latn";
+const ARABIC_DIGITS = "٠١٢٣٤٥٦٧٨٩";
+const PERSIAN_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
+
+function toEnglishDigits(value) {
+  if (value === null || value === undefined) return value;
+  return String(value)
+    .replace(/[٠-٩]/g, d => String(ARABIC_DIGITS.indexOf(d)))
+    .replace(/[۰-۹]/g, d => String(PERSIAN_DIGITS.indexOf(d)));
+}
+
+function cleanNumber(value) {
+  return String(toEnglishDigits(value ?? ""))
+    .replace(/,/g, "")
+    .replace(/٫/g, ".")
+    .replace(/٬/g, "");
+}
+
+function toNumber(value) {
+  const n = Number.parseFloat(cleanNumber(value));
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function toInteger(value) {
+  const n = Number.parseInt(cleanNumber(value), 10);
+  return Number.isNaN(n) ? 0 : n;
+}
+
+function fmtLatnNumber(value, options = {}) {
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return toEnglishDigits(n.toLocaleString(AR_KW_LATN, options));
+}
+
+function fmtLatnDate(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return toEnglishDigits(date.toLocaleDateString(AR_KW_LATN));
+}
+
+function normalizeDigitsDeep(value) {
+  if (Array.isArray(value)) return value.map(normalizeDigitsDeep);
+  if (value && typeof value === "object") {
+    return Object.fromEntries(Object.entries(value).map(([k, v]) => [k, normalizeDigitsDeep(v)]));
+  }
+  return typeof value === "string" ? toEnglishDigits(value) : value;
+}
+
+
+// ==================== CURRENCY HELPERS ====================
+const CURRENCY_OPTIONS = [
+  { code: "KWD", name: "دينار كويتي" },
+  { code: "USD", name: "دولار أمريكي" },
+  { code: "EUR", name: "يورو" },
+  { code: "GBP", name: "جنيه إسترليني" },
+  { code: "AUD", name: "دولار أسترالي" },
+  { code: "CAD", name: "دولار كندي" },
+  { code: "NZD", name: "دولار نيوزيلندي" },
+  { code: "CHF", name: "فرنك سويسري" },
+  { code: "JPY", name: "ين ياباني" },
+  { code: "CNY", name: "يوان صيني" },
+  { code: "HKD", name: "دولار هونغ كونغ" },
+  { code: "SGD", name: "دولار سنغافوري" },
+  { code: "MYR", name: "رينغيت ماليزي" },
+  { code: "INR", name: "روبية هندية" },
+  { code: "PKR", name: "روبية باكستانية" },
+  { code: "THB", name: "بات تايلندي" },
+  { code: "KRW", name: "وون كوري" },
+  { code: "SAR", name: "ريال سعودي" },
+  { code: "AED", name: "درهم إماراتي" },
+  { code: "QAR", name: "ريال قطري" },
+  { code: "BHD", name: "دينار بحريني" },
+  { code: "OMR", name: "ريال عماني" },
+  { code: "JOD", name: "دينار أردني" },
+  { code: "EGP", name: "جنيه مصري" },
+  { code: "MAD", name: "درهم مغربي" },
+  { code: "TND", name: "دينار تونسي" },
+  { code: "TRY", name: "ليرة تركية" },
+  { code: "SEK", name: "كرونا سويدية" },
+  { code: "NOK", name: "كرونا نرويجية" },
+  { code: "DKK", name: "كرونا دنماركية" },
+  { code: "ZAR", name: "راند جنوب أفريقي" },
+  { code: "OTHER", name: "عملة أخرى" },
+];
+
+function getAttacheCurrencyCode(d) {
+  const selected = d?.attacheCurrency || "USD";
+  if (selected === "OTHER") {
+    const custom = toEnglishDigits(d?.attacheCurrencyOther || "").trim().toUpperCase();
+    return custom || "OTHER";
+  }
+  return selected;
+}
+
+function getCurrencyName(code) {
+  const found = CURRENCY_OPTIONS.find(c => c.code === code);
+  return found ? found.name : "عملة أخرى";
+}
+
+function getCurrencyDisplay(d) {
+  const code = getAttacheCurrencyCode(d);
+  if (code === "OTHER") return "عملة أخرى";
+  return `${code} - ${getCurrencyName(code)}`;
+}
+
+function getEffectiveExchangeRate(d) {
+  return getAttacheCurrencyCode(d) === "KWD" ? 1 : (toNumber(d.exchangeRate) || 0);
+}
+
 // ==================== CALCULATIONS ====================
+function calcDuration(startY, startM, startD, endY, endM, endD) {
+  const sy = toInteger(startY) || 0;
+  const sm = toInteger(startM) || 0;
+  const sd = toInteger(startD) || 0;
+  const ey = toInteger(endY) || 0;
+  const em = toInteger(endM) || 0;
+  const ed = toInteger(endD) || 0;
+
+  if (!sy || !sm || !sd || !ey || !em || !ed) {
+    return { days: 0, months: 0, years: 0, total: 0 };
+  }
+
+  let days = ed - sd;
+  let months = em - sm;
+  let years = ey - sy;
+  if (days < 0) { days += 30; months -= 1; }
+  if (months < 0) { months += 12; years -= 1; }
+  if (years < 0) return { days: 0, months: 0, years: 0, total: 0 };
+
+  const total = (years * 12) + months + (days / 30);
+  return { days, months, years, total };
+}
+
+function durationFromTotalMonths(totalMonths) {
+  const safeTotal = Math.max(0, Number(totalMonths) || 0);
+  let years = Math.floor(safeTotal / 12);
+  let remainder = safeTotal - (years * 12);
+  let months = Math.floor(remainder);
+  let days = Math.round((remainder - months) * 30);
+
+  if (days >= 30) { days -= 30; months += 1; }
+  if (months >= 12) { months -= 12; years += 1; }
+  return { years, months, days };
+}
+
 function calcDebt(d) {
-  const totalKWD = (parseFloat(d.amountDiwan)||0) + (parseFloat(d.amountAttache)||0) * (parseFloat(d.exchangeRate)||0);
-  const mEndY=parseInt(d.missionEndYear)||0, mEndM=parseInt(d.missionEndMonth)||0, mEndD=parseInt(d.missionEndDay)||0;
-  const mStartY=parseInt(d.missionStartYear)||0, mStartM=parseInt(d.missionStartMonth)||0, mStartD=parseInt(d.missionStartDay)||0;
-  let diffDays=mEndD-mStartD, diffMonths=mEndM-mStartM, diffYears=mEndY-mStartY;
-  if(diffDays<0){diffDays+=30;diffMonths-=1;} if(diffMonths<0){diffMonths+=12;diffYears-=1;}
-  const returnMonth=parseInt(d.returnMonth)||0;
-  const missionDays=diffDays, missionMonths=diffMonths+returnMonth, missionYears=diffYears;
-  const missionTotal=(missionYears*12)+missionMonths+(missionDays/30);
-  const sEndY=parseInt(d.serviceEndYear)||0,sEndM=parseInt(d.serviceEndMonth)||0,sEndD=parseInt(d.serviceEndDay)||0;
-  const sStartY=parseInt(d.serviceStartYear)||0,sStartM=parseInt(d.serviceStartMonth)||0,sStartD=parseInt(d.serviceStartDay)||0;
-  let sdDays=sEndD-sStartD, sdMonths=sEndM-sStartM, sdYears=sEndY-sStartY;
-  if(sdDays<0){sdDays+=30;sdMonths-=1;} if(sdMonths<0){sdMonths+=12;sdYears-=1;}
-  const serviceDays=sdDays, serviceMonths=sdMonths, serviceYears=sdYears;
-  const serviceTotal=(serviceYears*12)+serviceMonths+(serviceDays/30);
-  const unservedTotal=(missionTotal>serviceTotal)?(missionTotal-serviceTotal):0;
-  const totalDebt=missionTotal>0?(totalKWD*0.5*unservedTotal/missionTotal):0;
-  return { totalKWD, missionDays, missionMonths, missionYears, missionTotal,
-    serviceDays, serviceMonths, serviceYears, serviceTotal,
-    unservedDays:Math.max(0,missionDays-serviceDays),
-    unservedMonths:Math.max(0,missionMonths-serviceMonths),
-    unservedYears:Math.max(0,missionYears-serviceYears),
-    unservedTotal, totalDebt };
+  const amountDiwan = toNumber(d.amountDiwan) || 0;
+  const amountAttache = toNumber(d.amountAttache) || 0;
+  const attacheCurrency = getAttacheCurrencyCode(d);
+  const attacheCurrencyDisplay = getCurrencyDisplay(d);
+  const exchangeRate = getEffectiveExchangeRate(d);
+  const attacheAmountKWD = amountAttache * exchangeRate;
+  const fullDebtAmount = toNumber(d.fullDebtAmount) || 0;
+  const totalKWD = amountDiwan + attacheAmountKWD;
+
+  const missionBase = calcDuration(
+    d.missionStartYear, d.missionStartMonth, d.missionStartDay,
+    d.missionEndYear, d.missionEndMonth, d.missionEndDay
+  );
+  const returnMonth = toInteger(d.returnMonth) || 0;
+  const missionTotal = Math.max(0, missionBase.total + returnMonth);
+  const missionDuration = durationFromTotalMonths(missionTotal);
+
+  const stopBase = calcDuration(
+    d.stopStartYear, d.stopStartMonth, d.stopStartDay,
+    d.stopEndYear, d.stopEndMonth, d.stopEndDay
+  );
+  const stopTotal = Math.max(0, stopBase.total);
+  const stopDuration = durationFromTotalMonths(stopTotal);
+
+  const serviceBase = calcDuration(
+    d.serviceStartYear, d.serviceStartMonth, d.serviceStartDay,
+    d.serviceEndYear, d.serviceEndMonth, d.serviceEndDay
+  );
+  const serviceTotal = Math.max(0, serviceBase.total);
+  const serviceDuration = durationFromTotalMonths(serviceTotal);
+
+  const unservedTotal = Math.max(0, missionTotal - stopTotal - serviceTotal);
+  const unservedDuration = durationFromTotalMonths(unservedTotal);
+  const partialDebt = missionTotal > 0 ? (totalKWD * 0.5 * unservedTotal / missionTotal) : 0;
+  const totalDebt = fullDebtAmount + partialDebt;
+
+  return {
+    totalKWD, fullDebtAmount, amountDiwan, amountAttache, attacheCurrency, attacheCurrencyDisplay, exchangeRate, attacheAmountKWD,
+    missionDays: missionDuration.days, missionMonths: missionDuration.months, missionYears: missionDuration.years, missionTotal,
+    stopDays: stopDuration.days, stopMonths: stopDuration.months, stopYears: stopDuration.years, stopTotal,
+    serviceDays: serviceDuration.days, serviceMonths: serviceDuration.months, serviceYears: serviceDuration.years, serviceTotal,
+    unservedDays: unservedDuration.days, unservedMonths: unservedDuration.months, unservedYears: unservedDuration.years, unservedTotal,
+    partialDebt, totalDebt,
+  };
 }
 
 const MONTHS_AR = ["يناير","فبراير","مارس","أبريل","مايو","يونيو","يوليو","أغسطس","سبتمبر","أكتوبر","نوفمبر","ديسمبر"];
 
 function calcCash(d) {
-  const salary=parseFloat(d.salary)||0;
+  const salary=toNumber(d.salary)||0;
   const days=d.monthDays||Array(12).fill(0);
   let totalDays=0, totalAmount=0;
   const monthAmounts=days.map((di,i)=>{
-    const nd=parseInt(di)||0;
+    const nd=toInteger(di)||0;
     const maxDays=i===1?28:(i===3||i===5||i===8||i===10)?30:31;
     totalDays+=nd;
     const amt=nd===0?0:(nd>=maxDays?salary:(salary*nd/maxDays));
     totalAmount+=amt; return amt;
   });
-  const deductions=parseFloat(d.deductions)||0, custody=parseFloat(d.custody)||0;
+  const deductions=toNumber(d.deductions)||0, custody=toNumber(d.custody)||0;
   return { totalDays, totalAmount, monthAmounts, deductions, custody, netDue:totalAmount-deductions-custody };
 }
 
@@ -56,8 +222,8 @@ const C = {
 };
 
 // ==================== PDF ====================
-const fmtKWD = n => (!n||isNaN(n))?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
-const fmtDur = (y,m,d) => `${y||0} سنة  ${m||0} شهر  ${d||0} يوم`;
+const fmtKWD = n => (!n||isNaN(n))?"—":fmtLatnNumber(n,{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+const fmtDur = (y,m,d) => `${toEnglishDigits(y||0)} سنة  ${toEnglishDigits(m||0)} شهر  ${toEnglishDigits(d||0)} يوم`;
 
 function generateDebtPDF(data, result, savedAt) {
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
@@ -86,47 +252,59 @@ td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a
 <div class="meta">
   <div class="meta-box"><label>الاسم الكامل</label><span>${data.name||"—"}</span></div>
   <div class="meta-box"><label>الرقم المدني</label><span>${data.civilId||"—"}</span></div>
-  <div class="meta-box"><label>تاريخ الإصدار</label><span>${savedAt||new Date().toLocaleDateString("ar-KW")}</span></div>
+  <div class="meta-box"><label>تاريخ الإصدار</label><span>${savedAt||fmtLatnDate()}</span></div>
 </div>
 <div class="section"><div class="section-title">المبالغ المالية</div>
 <table>
-  <tr><td>مبالغ صرفت عن طريق الديوان</td><td>${fmtKWD(parseFloat(data.amountDiwan)||0)}</td></tr>
-  <tr><td>مبالغ صرفت عن طريق الملحق الثقافي</td><td>${(parseFloat(data.amountAttache)||0).toLocaleString("ar-KW",{minimumFractionDigits:2})} $</td></tr>
-  <tr><td>سعر الصرف</td><td>${data.exchangeRate||"—"}</td></tr>
+  <tr><td>مبالغ صرفت عن طريق الديوان</td><td>${fmtKWD(toNumber(data.amountDiwan)||0)}</td></tr>
+  <tr><td>عملة الملحق الثقافي</td><td>${result.attacheCurrencyDisplay || getCurrencyDisplay(data)}</td></tr>
+  <tr><td>مبالغ صرفت عن طريق الملحق الثقافي</td><td>${fmtLatnNumber(toNumber(data.amountAttache)||0,{minimumFractionDigits:3,maximumFractionDigits:3})} ${result.attacheCurrency || getAttacheCurrencyCode(data)}</td></tr>
+  <tr><td>سعر الصرف مقابل الدينار الكويتي</td><td>${fmtLatnNumber(result.exchangeRate,{minimumFractionDigits:6,maximumFractionDigits:6})}</td></tr>
+  <tr><td>يعادل بالدينار الكويتي</td><td>${fmtKWD(result.attacheAmountKWD)}</td></tr>
   <tr><td><strong>إجمالي المبلغ بالدينار الكويتي</strong></td><td><strong>${fmtKWD(result.totalKWD)}</strong></td></tr>
+  <tr><td>المستحق 100%</td><td>${fmtKWD(result.fullDebtAmount)}</td></tr>
 </table></div>
 <div class="section"><div class="section-title">فترة البعثة</div>
 <table>
   <tr><td>بداية البعثة</td><td>${data.missionStartDay||0}/${data.missionStartMonth||0}/${data.missionStartYear||0}</td></tr>
   <tr><td>نهاية البعثة</td><td>${data.missionEndDay||0}/${data.missionEndMonth||0}/${data.missionEndYear||0}</td></tr>
   <tr><td>شهر العودة</td><td>${data.returnMonth||0} شهر</td></tr>
-  <tr><td><strong>مدة البعثة الإجمالية</strong></td><td><strong>${fmtDur(result.missionYears,result.missionMonths,result.missionDays)}</strong></td></tr>
+  <tr><td><strong>مدة البعثة الإجمالية</strong></td><td><strong>${fmtDur(result.missionYears,result.missionMonths,result.missionDays)} — ${fmtLatnNumber(result.missionTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} شهر</strong></td></tr>
+</table></div>
+<div class="section"><div class="section-title">فترة الوقف</div>
+<table>
+  <tr><td>بداية الوقف</td><td>${data.stopStartDay||0}/${data.stopStartMonth||0}/${data.stopStartYear||0}</td></tr>
+  <tr><td>نهاية الوقف</td><td>${data.stopEndDay||0}/${data.stopEndMonth||0}/${data.stopEndYear||0}</td></tr>
+  <tr><td><strong>مدة الوقف</strong></td><td><strong>${fmtDur(result.stopYears,result.stopMonths,result.stopDays)} — ${fmtLatnNumber(result.stopTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} شهر</strong></td></tr>
 </table></div>
 <div class="section"><div class="section-title">فترة الخدمة</div>
 <table>
   <tr><td>تاريخ مباشر العمل</td><td>${data.serviceStartDay||0}/${data.serviceStartMonth||0}/${data.serviceStartYear||0}</td></tr>
   <tr><td>تاريخ الاستقالة / نهاية الخدمة</td><td>${data.serviceEndDay||0}/${data.serviceEndMonth||0}/${data.serviceEndYear||0}</td></tr>
-  <tr><td><strong>مدة الخدمة الإجمالية</strong></td><td><strong>${fmtDur(result.serviceYears,result.serviceMonths,result.serviceDays)}</strong></td></tr>
+  <tr><td><strong>مدة الخدمة الإجمالية</strong></td><td><strong>${fmtDur(result.serviceYears,result.serviceMonths,result.serviceDays)} — ${fmtLatnNumber(result.serviceTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} شهر</strong></td></tr>
 </table></div>
 <div class="section"><div class="section-title">تفاصيل المديونية</div>
 <table>
   <tr><td>مدة البعثة</td><td>${fmtDur(result.missionYears,result.missionMonths,result.missionDays)}</td></tr>
+  <tr><td>مدة الوقف</td><td>${fmtDur(result.stopYears,result.stopMonths,result.stopDays)}</td></tr>
   <tr><td>مدة الخدمة</td><td>${fmtDur(result.serviceYears,result.serviceMonths,result.serviceDays)}</td></tr>
-  <tr><td>المدة التي لم يخدم مقابلها</td><td>${fmtDur(result.unservedYears,result.unservedMonths,result.unservedDays)}</td></tr>
-  <tr><td>المستحق على المبتعث</td><td>${fmtKWD(result.totalKWD)} × 50% × ${result.unservedTotal.toFixed(3)} / ${result.missionTotal.toFixed(3)}</td></tr>
+  <tr><td>المدة التي لم يخدم مقابلها</td><td>${fmtDur(result.unservedYears,result.unservedMonths,result.unservedDays)} — ${fmtLatnNumber(result.unservedTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} شهر</td></tr>
+  <tr><td>معادلة المستحق 50%</td><td>${fmtKWD(result.totalKWD)} × 50% × ${fmtLatnNumber(result.unservedTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} / ${fmtLatnNumber(result.missionTotal,{minimumFractionDigits:3,maximumFractionDigits:3})}</td></tr>
+  <tr><td>المستحق 50%</td><td>${fmtKWD(result.partialDebt)}</td></tr>
+  <tr><td>المستحق 100%</td><td>${fmtKWD(result.fullDebtAmount)}</td></tr>
 </table>
 <div class="result-box"><span class="label">إجمالي المديونية بعد تطبيق المادة (33)</span><span class="amount">${fmtKWD(result.totalDebt)}</span></div>
 </div>
 <div class="stamp-area">توقيع المختص &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; الختم الرسمي</div>
-<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("ar-KW")}</span></div>
+<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${fmtLatnDate()}</span></div>
 </body></html>`;
 }
 
 function generateCashPDF(data, result, savedAt) {
   const monthRows = MONTHS_AR.map((month,i) => {
-    const d=parseInt(data.monthDays?.[i])||0;
+    const d=toInteger(data.monthDays?.[i])||0;
     if(d===0) return "";
-    return `<tr><td>${month}</td><td>${d} يوم</td><td>${result.monthAmounts[i].toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})} د.ك</td></tr>`;
+    return `<tr><td>${month}</td><td>${d} يوم</td><td>${fmtLatnNumber(result.monthAmounts[i],{minimumFractionDigits:3,maximumFractionDigits:3})} د.ك</td></tr>`;
   }).filter(Boolean).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
 <style>
@@ -156,12 +334,12 @@ td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
 <div class="meta">
   <div class="meta-box"><label>الاسم الكامل</label><span>${data.name||"—"}</span></div>
   <div class="meta-box"><label>الرقم المدني</label><span>${data.civilId||"—"}</span></div>
-  <div class="meta-box"><label>الراتب الأساسي</label><span>${fmtKWD(parseFloat(data.salary)||0)}</span></div>
+  <div class="meta-box"><label>الراتب الأساسي</label><span>${fmtKWD(toNumber(data.salary)||0)}</span></div>
   <div class="meta-box"><label>إجمالي الأيام</label><span>${result.totalDays} يوم</span></div>
 </div>
 <div class="section"><div class="section-title">تفصيل أيام وقيمة الاستحقاق</div>
 <table><thead><tr><td>الشهر</td><td>عدد الأيام</td><td>مبلغ الاستحقاق</td></tr></thead>
-<tbody>${monthRows}<tr class="totals-row"><td>الإجمالي</td><td>${result.totalDays} يوم</td><td>${result.totalAmount.toLocaleString("ar-KW",{minimumFractionDigits:3})} د.ك</td></tr></tbody>
+<tbody>${monthRows}<tr class="totals-row"><td>الإجمالي</td><td>${result.totalDays} يوم</td><td>${fmtLatnNumber(result.totalAmount,{minimumFractionDigits:3})} د.ك</td></tr></tbody>
 </table></div>
 <div class="section"><div class="section-title">الملخص المالي</div>
 <table class="summary-table">
@@ -172,14 +350,14 @@ td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
 <div class="result-box"><span class="label">صافي المستحق</span><span class="amount">${fmtKWD(result.netDue)}</span></div>
 </div>
 <div class="stamp-area">توقيع المختص &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; الختم الرسمي</div>
-<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("ar-KW")}</span></div>
+<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${fmtLatnDate()}</span></div>
 </body></html>`;
 }
 
 function exportPDF(htmlContent) {
   const win = window.open("","_blank","width=900,height=700");
   if(!win){alert("يرجى السماح بالنوافذ المنبثقة");return;}
-  win.document.write(htmlContent); win.document.close(); win.focus();
+  win.document.write(toEnglishDigits(htmlContent)); win.document.close(); win.focus();
   setTimeout(()=>win.print(),800);
 }
 
@@ -206,9 +384,22 @@ function Field({label,value,onChange,type="text",wide,placeholder}){
   return(
     <div style={{display:"flex",flexDirection:"column",gap:6,flex:wide?"1 1 200px":"1 1 110px"}}>
       <label style={{fontSize:12,color:C.textSecondary,fontWeight:500}}>{label}</label>
-      <input className="num-input" type={type} value={value} placeholder={placeholder||""} onChange={e=>onChange(e.target.value)}
+      <input className="num-input" type={type} value={toEnglishDigits(value)} placeholder={toEnglishDigits(placeholder||"")} onChange={e=>onChange(toEnglishDigits(e.target.value))}
         style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.textPrimary,
           fontSize:14,padding:"8px 12px",fontFamily:type==="number"?"JetBrains Mono,monospace":"inherit",width:"100%"}}/>
+    </div>
+  );
+}
+
+function SelectField({label,value,onChange,options,wide}){
+  return(
+    <div style={{display:"flex",flexDirection:"column",gap:6,flex:wide?"1 1 220px":"1 1 160px"}}>
+      <label style={{fontSize:12,color:C.textSecondary,fontWeight:500}}>{label}</label>
+      <select value={value || ""} onChange={e=>onChange(e.target.value)}
+        style={{background:C.bg,border:`1px solid ${C.border}`,borderRadius:8,color:C.textPrimary,
+          fontSize:14,padding:"8px 12px",fontFamily:"inherit",width:"100%",outline:"none"}}>
+        {options.map(opt=><option key={opt.code} value={opt.code}>{opt.code} - {opt.name}</option>)}
+      </select>
     </div>
   );
 }
@@ -245,18 +436,23 @@ function Btn({children,onClick,color,outline,gold,danger,small}){
 }
 
 // ==================== DEBT FORM ====================
-const dftDebt={name:"",civilId:"",amountDiwan:"",amountAttache:"",exchangeRate:"",
+const dftDebt={name:"",civilId:"",amountDiwan:"",amountAttache:"",attacheCurrency:"USD",attacheCurrencyOther:"",exchangeRate:"",fullDebtAmount:"",
   missionStartDay:"",missionStartMonth:"",missionStartYear:"",
   missionEndDay:"",missionEndMonth:"",missionEndYear:"",returnMonth:"",
+  stopStartDay:"",stopStartMonth:"",stopStartYear:"",
+  stopEndDay:"",stopEndMonth:"",stopEndYear:"",
   serviceStartDay:"",serviceStartMonth:"",serviceStartYear:"",
   serviceEndDay:"",serviceEndMonth:"",serviceEndYear:""};
 
 function DebtForm({initial,onSave,onCancel,color,saving}){
   const [d,setD]=useState(initial||dftDebt);
   const set=k=>v=>setD(p=>({...p,[k]:v}));
+  const selectedAttacheCurrency = d.attacheCurrency || "USD";
+  const setAttacheCurrency = v => setD(p => ({...p, attacheCurrency:v, exchangeRate:v === "KWD" ? "1" : p.exchangeRate}));
   const res=calcDebt(d);
-  const fmt=n=>(!n||isNaN(n)||n===0)?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
-  const fmtM=(y,m,dd)=>`${y||0} سنة ${m||0} شهر ${dd||0} يوم`;
+  const fmt=n=>(!n||isNaN(n)||n===0)?"—":fmtLatnNumber(n,{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+  const fmtN=n=>fmtLatnNumber(n,{minimumFractionDigits:3,maximumFractionDigits:3});
+  const fmtM=(y,m,dd)=>`${toEnglishDigits(y||0)} سنة ${toEnglishDigits(m||0)} شهر ${toEnglishDigits(dd||0)} يوم`;
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:20}}>
       <Card><SecHead title="البيانات الشخصية" color={color} icon="👤"/>
@@ -268,10 +464,17 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
       <Card><SecHead title="المبالغ المالية" color={color} icon="💰"/>
         <div style={{display:"flex",gap:16,flexWrap:"wrap"}}>
           <Field label="مبالغ الديوان (د.ك)" type="number" value={d.amountDiwan} onChange={set("amountDiwan")}/>
-          <Field label="مبالغ الملحق الثقافي ($)" type="number" value={d.amountAttache} onChange={set("amountAttache")}/>
-          <Field label="سعر الصرف" type="number" value={d.exchangeRate} onChange={set("exchangeRate")} placeholder="0.336924"/>
+          <SelectField label="عملة الملحق الثقافي" value={selectedAttacheCurrency} onChange={setAttacheCurrency} options={CURRENCY_OPTIONS} wide/>
+          {selectedAttacheCurrency === "OTHER"&&<Field label="رمز العملة" value={d.attacheCurrencyOther} onChange={set("attacheCurrencyOther")} placeholder="مثال: MXN"/>}
+          <Field label={`مبالغ الملحق الثقافي (${res.attacheCurrency || getAttacheCurrencyCode(d)})`} type="number" value={d.amountAttache} onChange={set("amountAttache")}/>
+          <Field label={selectedAttacheCurrency === "KWD" ? "سعر الصرف (تلقائي)" : "سعر الصرف مقابل الدينار"} type="number" value={selectedAttacheCurrency === "KWD" ? "1" : d.exchangeRate} onChange={selectedAttacheCurrency === "KWD" ? ()=>{} : set("exchangeRate")} placeholder="0.336924"/>
+          <Field label="المستحق 100% (د.ك)" type="number" value={d.fullDebtAmount} onChange={set("fullDebtAmount")} placeholder="0"/>
         </div>
-        {res.totalKWD>0&&<div style={{marginTop:12}}><ResBox label="إجمالي المبلغ بالدينار الكويتي" value={fmt(res.totalKWD)} color={color}/></div>}
+        {res.totalKWD>0&&<div style={{marginTop:12,display:"flex",flexDirection:"column",gap:10}}>
+          <ResBox label="يعادل مبلغ الملحق بالدينار الكويتي" value={fmt(res.attacheAmountKWD)} color={C.gold}/>
+          <ResBox label="إجمالي المبلغ بالدينار الكويتي" value={fmt(res.totalKWD)} color={color}/>
+          {res.fullDebtAmount>0&&<ResBox label="المستحق 100%" value={fmt(res.fullDebtAmount)} color={C.gold}/>} 
+        </div>}
       </Card>
       <Card><SecHead title="فترة البعثة — تطبيق المادة (33) من القرار رقم 86/10" color={color} icon="📅"/>
         <div style={{display:"flex",flexDirection:"column",gap:16}}>
@@ -290,7 +493,26 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
             </div>
           </div>
           <Field label="شهر العودة (أشهر إضافية)" type="number" value={d.returnMonth} onChange={set("returnMonth")}/>
-          {res.missionTotal>0&&<ResBox label="مدة البعثة" value={fmtM(res.missionYears,res.missionMonths,res.missionDays)} color={color}/>}
+          {res.missionTotal>0&&<ResBox label="مدة البعثة" value={`${fmtM(res.missionYears,res.missionMonths,res.missionDays)} — ${fmtN(res.missionTotal)} شهر`} color={color}/>} 
+        </div>
+      </Card>
+      <Card><SecHead title="فترة الوقف" color={color} icon="⏸️"/>
+        <div style={{display:"flex",flexDirection:"column",gap:16}}>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:8,fontWeight:600}}>بداية الوقف</div>
+            <div style={{display:"flex",gap:12}}>
+              <Field label="يوم" type="number" value={d.stopStartDay} onChange={set("stopStartDay")}/>
+              <Field label="شهر" type="number" value={d.stopStartMonth} onChange={set("stopStartMonth")}/>
+              <Field label="سنة" type="number" value={d.stopStartYear} onChange={set("stopStartYear")}/>
+            </div>
+          </div>
+          <div><div style={{fontSize:12,color:C.textMuted,marginBottom:8,fontWeight:600}}>نهاية الوقف</div>
+            <div style={{display:"flex",gap:12}}>
+              <Field label="يوم" type="number" value={d.stopEndDay} onChange={set("stopEndDay")}/>
+              <Field label="شهر" type="number" value={d.stopEndMonth} onChange={set("stopEndMonth")}/>
+              <Field label="سنة" type="number" value={d.stopEndYear} onChange={set("stopEndYear")}/>
+            </div>
+          </div>
+          {res.stopTotal>0&&<ResBox label="مدة الوقف" value={`${fmtM(res.stopYears,res.stopMonths,res.stopDays)} — ${fmtN(res.stopTotal)} شهر`} color={C.gold}/>} 
         </div>
       </Card>
       <Card><SecHead title="فترة الخدمة" color={color} icon="🏢"/>
@@ -309,22 +531,27 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
               <Field label="سنة" type="number" value={d.serviceEndYear} onChange={set("serviceEndYear")}/>
             </div>
           </div>
-          {res.serviceTotal>0&&<ResBox label="مدة الخدمة" value={fmtM(res.serviceYears,res.serviceMonths,res.serviceDays)} color={color}/>}
+          {res.serviceTotal>0&&<ResBox label="مدة الخدمة" value={`${fmtM(res.serviceYears,res.serviceMonths,res.serviceDays)} — ${fmtN(res.serviceTotal)} شهر`} color={color}/>} 
         </div>
       </Card>
       {res.totalKWD>0&&res.missionTotal>0&&(
         <Card style={{border:`1px solid ${color}40`,background:`linear-gradient(135deg,${color}10,${C.surface})`}}>
-          <SecHead title="نتائج الحساب" color={color} icon="📊"/>
+          <SecHead title="نتائج الحساب وفق نموذج الوقف" color={color} icon="📊"/>
           <div style={{display:"flex",flexDirection:"column",gap:10}}>
-            <ResBox label="المدة التي لم يخدم مقابلها" value={fmtM(res.unservedYears,res.unservedMonths,res.unservedDays)} color={C.gold}/>
+            <ResBox label="مدة البعثة" value={`${fmtM(res.missionYears,res.missionMonths,res.missionDays)} — ${fmtN(res.missionTotal)} شهر`} color={color}/>
+            {res.stopTotal>0&&<ResBox label="مدة الوقف" value={`${fmtM(res.stopYears,res.stopMonths,res.stopDays)} — ${fmtN(res.stopTotal)} شهر`} color={C.gold}/>} 
+            <ResBox label="مدة الخدمة" value={`${fmtM(res.serviceYears,res.serviceMonths,res.serviceDays)} — ${fmtN(res.serviceTotal)} شهر`} color={color}/>
+            <ResBox label="المدة التي لم يخدم مقابلها" value={`${fmtM(res.unservedYears,res.unservedMonths,res.unservedDays)} — ${fmtN(res.unservedTotal)} شهر`} color={C.gold}/>
             <div style={{height:1,background:C.border}}/>
+            <ResBox label="المستحق 50%" value={fmt(res.partialDebt)} color={color}/>
+            <ResBox label="المستحق 100%" value={fmt(res.fullDebtAmount)} color={C.gold}/>
             <ResBox label="إجمالي المديونية بعد تطبيق المادة (33)" value={fmt(res.totalDebt)} color={color} large/>
           </div>
         </Card>
       )}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
         {onCancel&&<Btn outline onClick={onCancel}>إلغاء</Btn>}
-        <Btn gold onClick={()=>exportPDF(generateDebtPDF(d,res,new Date().toLocaleDateString("ar-KW")))}>🖨️ طباعة / PDF</Btn>
+        <Btn gold onClick={()=>exportPDF(generateDebtPDF(d,res,fmtLatnDate()))}>🖨️ طباعة / PDF</Btn>
         <Btn color={color} onClick={()=>onSave(d,res)}>{saving?<span>⏳ جاري الحفظ...</span>:"💾 حفظ السجل"}</Btn>
       </div>
     </div>
@@ -339,7 +566,7 @@ function CashForm({initial,onSave,onCancel,color,saving}){
   const set=k=>v=>setD(p=>({...p,[k]:v}));
   const setM=i=>v=>setD(p=>{const a=[...p.monthDays];a[i]=v;return{...p,monthDays:a};});
   const res=calcCash(d);
-  const fmt=n=>(!n||isNaN(n)||!isFinite(n))?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+  const fmt=n=>(!n||isNaN(n)||!isFinite(n))?"—":fmtLatnNumber(n,{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
   const hasData=res.totalDays>0;
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:20}}>
@@ -353,13 +580,13 @@ function CashForm({initial,onSave,onCancel,color,saving}){
       <Card><SecHead title="تفصيل أيام الاستحقاق" color={color} icon="📆"/>
         <div style={{display:"grid",gridTemplateColumns:"repeat(4,1fr)",gap:12}}>
           {MONTHS_AR.map((month,i)=>{
-            const active=(parseInt(d.monthDays[i])||0)>0;
+            const active=(toInteger(d.monthDays[i])||0)>0;
             return(
               <div key={i} style={{background:active?`${color}12`:C.bg,border:`1px solid ${active?color+"40":C.border}`,borderRadius:10,padding:"10px 12px",transition:"all 0.2s"}}>
                 <div style={{fontSize:11,color:C.textMuted,marginBottom:6,fontWeight:600}}>{month}</div>
-                <input className="num-input" type="number" value={d.monthDays[i]} onChange={e=>setM(i)(e.target.value)} placeholder="0" min={0} max={31}
+                <input className="num-input" type="number" value={toEnglishDigits(d.monthDays[i])} onChange={e=>setM(i)(toEnglishDigits(e.target.value))} placeholder="0" min={0} max={31}
                   style={{background:"transparent",border:"none",color:active?color:C.textPrimary,fontSize:18,fontWeight:700,width:"100%",fontFamily:"JetBrains Mono,monospace"}}/>
-                {res.monthAmounts[i]>0&&<div style={{fontSize:10,color:C.textMuted,marginTop:4}}>{res.monthAmounts[i].toLocaleString("ar-KW",{maximumFractionDigits:2})} د.ك</div>}
+                {res.monthAmounts[i]>0&&<div style={{fontSize:10,color:C.textMuted,marginTop:4}}>{fmtLatnNumber(res.monthAmounts[i],{maximumFractionDigits:2})} د.ك</div>}
               </div>
             );
           })}
@@ -397,7 +624,7 @@ function CashForm({initial,onSave,onCancel,color,saving}){
       )}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
         {onCancel&&<Btn outline onClick={onCancel}>إلغاء</Btn>}
-        <Btn gold onClick={()=>exportPDF(generateCashPDF(d,res,new Date().toLocaleDateString("ar-KW")))}>🖨️ طباعة / PDF</Btn>
+        <Btn gold onClick={()=>exportPDF(generateCashPDF(d,res,fmtLatnDate()))}>🖨️ طباعة / PDF</Btn>
         <Btn color={color} onClick={()=>onSave(d,res)}>{saving?<span>⏳ جاري الحفظ...</span>:"💾 حفظ السجل"}</Btn>
       </div>
     </div>
@@ -423,12 +650,12 @@ function RecordsList({records,onEdit,onDelete,onPrint,color,type,loading}){
       {records.map(rec=>(
         <div key={rec.id} className="rec-item" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
-            <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{rec.name||rec.data?.name||"بدون اسم"}</div>
-            <div style={{fontSize:12,color:C.textMuted}}>{rec.civil_id||rec.data?.civilId||"—"} • {new Date(rec.saved_at||rec.created_at).toLocaleDateString("ar-KW")}</div>
+            <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{toEnglishDigits(rec.name||rec.data?.name||"بدون اسم")}</div>
+            <div style={{fontSize:12,color:C.textMuted}}>{toEnglishDigits(rec.civil_id||rec.data?.civilId||"—")} • {fmtLatnDate(rec.saved_at||rec.created_at)}</div>
             <div style={{fontSize:13,color,fontFamily:"JetBrains Mono",fontWeight:600}}>
               {type==="debt"
-                ?(rec.result?.totalDebt>0?rec.result.totalDebt.toLocaleString("ar-KW",{maximumFractionDigits:3})+" د.ك":"—")
-                :(rec.result?.netDue>0?rec.result.netDue.toLocaleString("ar-KW",{maximumFractionDigits:3})+" د.ك":"—")}
+                ?(rec.result?.totalDebt>0?fmtLatnNumber(rec.result.totalDebt,{maximumFractionDigits:3})+" د.ك":"—")
+                :(rec.result?.netDue>0?fmtLatnNumber(rec.result.netDue,{maximumFractionDigits:3})+" د.ك":"—")}
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -475,7 +702,8 @@ function SectionView({type,color,title,icon}){
   const handleSave=async(data,result)=>{
     setSaving(true);
     try{
-      const payload={name:data.name,civil_id:data.civilId,data,result,saved_at:new Date().toISOString()};
+      const cleanData = normalizeDigitsDeep(data);
+      const payload={name:cleanData.name,civil_id:cleanData.civilId,data:cleanData,result,saved_at:new Date().toISOString()};
       if(editRec){
         await (type==="debt"?updateDebtRecord:updateCashRecord)(editRec.id,payload);
         showToast("✅ تم تحديث السجل بنجاح");
@@ -498,8 +726,8 @@ function SectionView({type,color,title,icon}){
 
   const handlePrint=rec=>{
     const html=type==="debt"
-      ?generateDebtPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("ar-KW"))
-      :generateCashPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("ar-KW"));
+      ?generateDebtPDF(rec.data,rec.result,fmtLatnDate(rec.saved_at))
+      :generateCashPDF(rec.data,rec.result,fmtLatnDate(rec.saved_at));
     exportPDF(html);
   };
 
@@ -557,7 +785,7 @@ export default function App(){
             <div style={{display:"flex",gap:8}}>
               {[{k:"debt",label:"مديونية",color:C.debtLight,bg:C.debt},{k:"cash",label:"بدل نقدي",color:C.cashLight,bg:C.cash}].map(t=>(
                 <div key={t.k} style={{textAlign:"center",padding:"6px 16px",background:`${t.bg}15`,border:`1px solid ${t.bg}30`,borderRadius:8}}>
-                  <div style={{fontSize:18,fontWeight:800,color:t.color,fontFamily:"JetBrains Mono"}}>{counts[t.k]}</div>
+                  <div style={{fontSize:18,fontWeight:800,color:t.color,fontFamily:"JetBrains Mono"}}>{toEnglishDigits(counts[t.k])}</div>
                   <div style={{fontSize:10,color:C.textMuted}}>{t.label}</div>
                 </div>
               ))}
