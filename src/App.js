@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   fetchDebtRecords, saveDebtRecord, updateDebtRecord, deleteDebtRecord,
   fetchCashRecords, saveCashRecord, updateCashRecord, deleteCashRecord,
-} from "./src/supabase";
+} from "./supabase";
 
 // ==================== CALCULATIONS ====================
 function calcDebt(d) {
@@ -56,7 +56,7 @@ const C = {
 };
 
 // ==================== PDF ====================
-const fmtKWD = n => (!n||isNaN(n))?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+const fmtKWD = n => (!n||isNaN(n))?"—":n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
 const fmtDur = (y,m,d) => `${y||0} سنة  ${m||0} شهر  ${d||0} يوم`;
 
 function generateDebtPDF(data, result, savedAt) {
@@ -86,12 +86,12 @@ td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a
 <div class="meta">
   <div class="meta-box"><label>الاسم الكامل</label><span>${data.name||"—"}</span></div>
   <div class="meta-box"><label>الرقم المدني</label><span>${data.civilId||"—"}</span></div>
-  <div class="meta-box"><label>تاريخ الإصدار</label><span>${savedAt||new Date().toLocaleDateString("ar-KW")}</span></div>
+  <div class="meta-box"><label>تاريخ الإصدار</label><span>${savedAt||new Date().toLocaleDateString("en-US")}</span></div>
 </div>
 <div class="section"><div class="section-title">المبالغ المالية</div>
 <table>
   <tr><td>مبالغ صرفت عن طريق الديوان</td><td>${fmtKWD(parseFloat(data.amountDiwan)||0)}</td></tr>
-  <tr><td>مبالغ صرفت عن طريق الملحق الثقافي</td><td>${(parseFloat(data.amountAttache)||0).toLocaleString("ar-KW",{minimumFractionDigits:2})} $</td></tr>
+  <tr><td>مبالغ صرفت عن طريق الملحق الثقافي</td><td>${(parseFloat(data.amountAttache)||0).toLocaleString("en-US",{minimumFractionDigits:2})} $</td></tr>
   <tr><td>سعر الصرف</td><td>${data.exchangeRate||"—"}</td></tr>
   <tr><td><strong>إجمالي المبلغ بالدينار الكويتي</strong></td><td><strong>${fmtKWD(result.totalKWD)}</strong></td></tr>
 </table></div>
@@ -118,7 +118,7 @@ td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a
 <div class="result-box"><span class="label">إجمالي المديونية بعد تطبيق المادة (33)</span><span class="amount">${fmtKWD(result.totalDebt)}</span></div>
 </div>
 <div class="stamp-area">توقيع المختص &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; الختم الرسمي</div>
-<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("ar-KW")}</span></div>
+<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("en-US")}</span></div>
 </body></html>`;
 }
 
@@ -126,7 +126,7 @@ function generateCashPDF(data, result, savedAt) {
   const monthRows = MONTHS_AR.map((month,i) => {
     const d=parseInt(data.monthDays?.[i])||0;
     if(d===0) return "";
-    return `<tr><td>${month}</td><td>${d} يوم</td><td>${result.monthAmounts[i].toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})} د.ك</td></tr>`;
+    return `<tr><td>${month}</td><td>${d} يوم</td><td>${result.monthAmounts[i].toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})} د.ك</td></tr>`;
   }).filter(Boolean).join("");
   return `<!DOCTYPE html><html dir="rtl" lang="ar"><head><meta charset="UTF-8"/>
 <style>
@@ -161,7 +161,7 @@ td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
 </div>
 <div class="section"><div class="section-title">تفصيل أيام وقيمة الاستحقاق</div>
 <table><thead><tr><td>الشهر</td><td>عدد الأيام</td><td>مبلغ الاستحقاق</td></tr></thead>
-<tbody>${monthRows}<tr class="totals-row"><td>الإجمالي</td><td>${result.totalDays} يوم</td><td>${result.totalAmount.toLocaleString("ar-KW",{minimumFractionDigits:3})} د.ك</td></tr></tbody>
+<tbody>${monthRows}<tr class="totals-row"><td>الإجمالي</td><td>${result.totalDays} يوم</td><td>${result.totalAmount.toLocaleString("en-US",{minimumFractionDigits:3})} د.ك</td></tr></tbody>
 </table></div>
 <div class="section"><div class="section-title">الملخص المالي</div>
 <table class="summary-table">
@@ -172,7 +172,7 @@ td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
 <div class="result-box"><span class="label">صافي المستحق</span><span class="amount">${fmtKWD(result.netDue)}</span></div>
 </div>
 <div class="stamp-area">توقيع المختص &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; الختم الرسمي</div>
-<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("ar-KW")}</span></div>
+<div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${new Date().toLocaleDateString("en-US")}</span></div>
 </body></html>`;
 }
 
@@ -255,7 +255,7 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
   const [d,setD]=useState(initial||dftDebt);
   const set=k=>v=>setD(p=>({...p,[k]:v}));
   const res=calcDebt(d);
-  const fmt=n=>(!n||isNaN(n)||n===0)?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+  const fmt=n=>(!n||isNaN(n)||n===0)?"—":n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
   const fmtM=(y,m,dd)=>`${y||0} سنة ${m||0} شهر ${dd||0} يوم`;
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:20}}>
@@ -324,7 +324,7 @@ function DebtForm({initial,onSave,onCancel,color,saving}){
       )}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
         {onCancel&&<Btn outline onClick={onCancel}>إلغاء</Btn>}
-        <Btn gold onClick={()=>exportPDF(generateDebtPDF(d,res,new Date().toLocaleDateString("ar-KW")))}>🖨️ طباعة / PDF</Btn>
+        <Btn gold onClick={()=>exportPDF(generateDebtPDF(d,res,new Date().toLocaleDateString("en-US")))}>🖨️ طباعة / PDF</Btn>
         <Btn color={color} onClick={()=>onSave(d,res)}>{saving?<span>⏳ جاري الحفظ...</span>:"💾 حفظ السجل"}</Btn>
       </div>
     </div>
@@ -339,7 +339,7 @@ function CashForm({initial,onSave,onCancel,color,saving}){
   const set=k=>v=>setD(p=>({...p,[k]:v}));
   const setM=i=>v=>setD(p=>{const a=[...p.monthDays];a[i]=v;return{...p,monthDays:a};});
   const res=calcCash(d);
-  const fmt=n=>(!n||isNaN(n)||!isFinite(n))?"—":n.toLocaleString("ar-KW",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
+  const fmt=n=>(!n||isNaN(n)||!isFinite(n))?"—":n.toLocaleString("en-US",{minimumFractionDigits:3,maximumFractionDigits:3})+" د.ك";
   const hasData=res.totalDays>0;
   return(
     <div className="fade-in" style={{display:"flex",flexDirection:"column",gap:20}}>
@@ -359,7 +359,7 @@ function CashForm({initial,onSave,onCancel,color,saving}){
                 <div style={{fontSize:11,color:C.textMuted,marginBottom:6,fontWeight:600}}>{month}</div>
                 <input className="num-input" type="number" value={d.monthDays[i]} onChange={e=>setM(i)(e.target.value)} placeholder="0" min={0} max={31}
                   style={{background:"transparent",border:"none",color:active?color:C.textPrimary,fontSize:18,fontWeight:700,width:"100%",fontFamily:"JetBrains Mono,monospace"}}/>
-                {res.monthAmounts[i]>0&&<div style={{fontSize:10,color:C.textMuted,marginTop:4}}>{res.monthAmounts[i].toLocaleString("ar-KW",{maximumFractionDigits:2})} د.ك</div>}
+                {res.monthAmounts[i]>0&&<div style={{fontSize:10,color:C.textMuted,marginTop:4}}>{res.monthAmounts[i].toLocaleString("en-US",{maximumFractionDigits:2})} د.ك</div>}
               </div>
             );
           })}
@@ -397,7 +397,7 @@ function CashForm({initial,onSave,onCancel,color,saving}){
       )}
       <div style={{display:"flex",gap:10,justifyContent:"flex-end",flexWrap:"wrap"}}>
         {onCancel&&<Btn outline onClick={onCancel}>إلغاء</Btn>}
-        <Btn gold onClick={()=>exportPDF(generateCashPDF(d,res,new Date().toLocaleDateString("ar-KW")))}>🖨️ طباعة / PDF</Btn>
+        <Btn gold onClick={()=>exportPDF(generateCashPDF(d,res,new Date().toLocaleDateString("en-US")))}>🖨️ طباعة / PDF</Btn>
         <Btn color={color} onClick={()=>onSave(d,res)}>{saving?<span>⏳ جاري الحفظ...</span>:"💾 حفظ السجل"}</Btn>
       </div>
     </div>
@@ -424,11 +424,11 @@ function RecordsList({records,onEdit,onDelete,onPrint,color,type,loading}){
         <div key={rec.id} className="rec-item" style={{background:C.surface,border:`1px solid ${C.border}`,borderRadius:12,padding:"16px 20px",display:"flex",justifyContent:"space-between",alignItems:"center",gap:12,flexWrap:"wrap"}}>
           <div style={{display:"flex",flexDirection:"column",gap:4}}>
             <div style={{fontSize:15,fontWeight:700,color:C.textPrimary}}>{rec.name||rec.data?.name||"بدون اسم"}</div>
-            <div style={{fontSize:12,color:C.textMuted}}>{rec.civil_id||rec.data?.civilId||"—"} • {new Date(rec.saved_at||rec.created_at).toLocaleDateString("ar-KW")}</div>
+            <div style={{fontSize:12,color:C.textMuted}}>{rec.civil_id||rec.data?.civilId||"—"} • {new Date(rec.saved_at||rec.created_at).toLocaleDateString("en-US")}</div>
             <div style={{fontSize:13,color,fontFamily:"JetBrains Mono",fontWeight:600}}>
               {type==="debt"
-                ?(rec.result?.totalDebt>0?rec.result.totalDebt.toLocaleString("ar-KW",{maximumFractionDigits:3})+" د.ك":"—")
-                :(rec.result?.netDue>0?rec.result.netDue.toLocaleString("ar-KW",{maximumFractionDigits:3})+" د.ك":"—")}
+                ?(rec.result?.totalDebt>0?rec.result.totalDebt.toLocaleString("en-US",{maximumFractionDigits:3})+" د.ك":"—")
+                :(rec.result?.netDue>0?rec.result.netDue.toLocaleString("en-US",{maximumFractionDigits:3})+" د.ك":"—")}
             </div>
           </div>
           <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
@@ -490,8 +490,8 @@ function SectionView({type,color,title,icon}){
 
   const handlePrint=rec=>{
     const html=type==="debt"
-      ?generateDebtPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("ar-KW"))
-      :generateCashPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("ar-KW"));
+      ?generateDebtPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("en-US"))
+      :generateCashPDF(rec.data,rec.result,new Date(rec.saved_at).toLocaleDateString("en-US"));
     exportPDF(html);
   };
 
