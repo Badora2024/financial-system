@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback } from "react";
 import {
   fetchDebtRecords, saveDebtRecord, updateDebtRecord, deleteDebtRecord,
   fetchCashRecords, saveCashRecord, updateCashRecord, deleteCashRecord,
-} from "./src/supabase";
+} from "./supabase";
 
 // ==================== CALCULATIONS ====================
 function calcDebt(d) {
