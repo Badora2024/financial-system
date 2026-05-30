@@ -99,7 +99,7 @@ export async function deleteCashRecord(id) {
 
 export function subscribeToRecords(tableName, onChange) {
   return supabase
-    .channel(`realtime-${tableName}`)
+    .channel(`realtime-${tableName}-${Date.now()}`)
     .on(
       "postgres_changes",
       {
