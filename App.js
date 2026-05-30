@@ -462,7 +462,15 @@ function SectionView({type,color,title,icon}){
     finally{setLoading(false);}
   },[type]);
 
-  useEffect(()=>{load();},[load]);
+  useEffect(() => {
+    load();
+  
+    const interval = setInterval(() => {
+      load();
+    }, 3000);
+  
+    return () => clearInterval(interval);
+  }, [load]);
 
   const handleSave=async(data,result)=>{
     setSaving(true);
