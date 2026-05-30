@@ -230,25 +230,33 @@ function generateDebtPDF(data, result, savedAt) {
 <style>
 @import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Arabic:wght@400;600;700&display=swap');
 *{margin:0;padding:0;box-sizing:border-box;}
-body{font-family:'IBM Plex Arabic',Arial,sans-serif;direction:rtl;background:#fff;color:#1a202c;padding:32px;}
-.header{background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:12px;padding:24px 32px;margin-bottom:28px;display:flex;justify-content:space-between;align-items:center;}
-.header h1{font-size:22px;font-weight:700;} .header .sub{font-size:12px;opacity:0.8;margin-top:4px;}
-.meta{display:flex;gap:16px;margin-bottom:24px;}
-.meta-box{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;}
-.meta-box label{font-size:11px;color:#64748b;font-weight:600;display:block;margin-bottom:4px;}
-.meta-box span{font-size:15px;font-weight:700;color:#1a202c;}
-.section{margin-bottom:24px;}
+@page{size:A4;margin:14mm;}
+body{font-family:'IBM Plex Arabic',Arial,sans-serif;direction:rtl;background:#fff;color:#1a202c;padding:22px;}
+.header{position:relative;background:linear-gradient(135deg,#7c3aed,#5b21b6);color:#fff;border-radius:12px;padding:24px 32px;margin-bottom:24px;min-height:98px;display:flex;justify-content:flex-start;align-items:center;overflow:hidden;}
+.header-main{text-align:right;padding-left:260px;}
+.header-left{position:absolute;left:32px;top:22px;text-align:left;font-size:13px;font-weight:700;line-height:1.7;color:#fff;opacity:0.96;}
+.header-icon{position:absolute;left:32px;bottom:16px;font-size:30px;opacity:0.85;}
+.header h1{font-size:22px;font-weight:700;} .header .sub{font-size:12px;opacity:0.86;margin-top:4px;}
+.meta{display:flex;gap:16px;margin-bottom:22px;}
+.meta-box{flex:1;background:#f8fafc;border:1px solid #e2e8f0;border-radius:8px;padding:14px 18px;text-align:center;display:flex;flex-direction:column;align-items:center;justify-content:center;min-height:74px;}
+.meta-box label{font-size:11px;color:#64748b;font-weight:600;display:block;margin-bottom:6px;text-align:center;width:100%;}
+.meta-box span{font-size:15px;font-weight:700;color:#1a202c;display:block;text-align:center;width:100%;}
+.section{margin-bottom:20px;}
 .section-title{font-size:13px;font-weight:700;color:#7c3aed;border-bottom:2px solid #7c3aed;padding-bottom:6px;margin-bottom:14px;}
 table{width:100%;border-collapse:collapse;}
 td{padding:9px 14px;font-size:13px;border-bottom:1px solid #f1f5f9;}
 td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a202c;text-align:left;}
 .result-box{background:linear-gradient(135deg,#7c3aed18,#7c3aed08);border:2px solid #7c3aed40;border-radius:10px;padding:16px 20px;margin-top:20px;display:flex;justify-content:space-between;align-items:center;}
 .result-box .label{font-size:14px;color:#475569;} .result-box .amount{font-size:24px;font-weight:700;color:#7c3aed;}
-.footer{margin-top:32px;border-top:1px solid #e2e8f0;padding-top:16px;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;}
-.stamp-area{border:2px dashed #e2e8f0;border-radius:8px;padding:24px;text-align:center;color:#cbd5e1;font-size:12px;margin-top:20px;}
-@media print{body{padding:20px;}}
+.footer{margin-top:28px;border-top:1px solid #e2e8f0;padding-top:14px;display:flex;justify-content:space-between;font-size:11px;color:#94a3b8;}
+.page-break{break-before:page;page-break-before:always;padding-top:0;}
+.signatures{margin-top:34px;display:grid;grid-template-columns:repeat(3,1fr);gap:18px;direction:rtl;}
+.sig-box{min-height:86px;border:1px solid #e2e8f0;border-radius:10px;padding:14px 18px;text-align:center;background:#fff;display:flex;flex-direction:column;justify-content:space-between;}
+.sig-title{font-size:13px;font-weight:700;color:#1a202c;}
+.sig-line{height:36px;border-bottom:1px dashed #94a3b8;margin:0 10px;}
+@media print{body{padding:0;}.page-break{break-before:page;page-break-before:always;}}
 </style></head><body>
-<div class="header"><div><div class="sub">ديوان الخدمة المدنية — المديريات المالية</div><h1>نموذج حساب المديونية</h1><div class="sub">تطبيق المادة (33) من القرار رقم 86/10</div></div><div style="font-size:40px">⚖️</div></div>
+<div class="header"><div class="header-left">ديوان الخدمة المدنية<br/>إدارة الشئون المالية</div><div class="header-main"><h1>نموذج حساب المديونية</h1><div class="sub">تطبيق المادة (33) من القرار رقم 86/10</div></div><div class="header-icon">⚖️</div></div>
 <div class="meta">
   <div class="meta-box"><label>الاسم الكامل</label><span>${data.name||"—"}</span></div>
   <div class="meta-box"><label>الرقم المدني</label><span>${data.civilId||"—"}</span></div>
@@ -277,7 +285,7 @@ td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a
   <tr><td>نهاية الوقف</td><td>${data.stopEndDay||0}/${data.stopEndMonth||0}/${data.stopEndYear||0}</td></tr>
   <tr><td><strong>مدة الوقف</strong></td><td><strong>${fmtDur(result.stopYears,result.stopMonths,result.stopDays)} — ${fmtLatnNumber(result.stopTotal,{minimumFractionDigits:3,maximumFractionDigits:3})} شهر</strong></td></tr>
 </table></div>
-<div class="section"><div class="section-title">فترة الخدمة</div>
+<div class="section page-break"><div class="section-title">فترة الخدمة</div>
 <table>
   <tr><td>تاريخ مباشر العمل</td><td>${data.serviceStartDay||0}/${data.serviceStartMonth||0}/${data.serviceStartYear||0}</td></tr>
   <tr><td>تاريخ الاستقالة / نهاية الخدمة</td><td>${data.serviceEndDay||0}/${data.serviceEndMonth||0}/${data.serviceEndYear||0}</td></tr>
@@ -295,7 +303,11 @@ td:first-child{color:#64748b;width:55%;} td:last-child{font-weight:600;color:#1a
 </table>
 <div class="result-box"><span class="label">إجمالي المديونية بعد تطبيق المادة (33)</span><span class="amount">${fmtKWD(result.totalDebt)}</span></div>
 </div>
-<div class="stamp-area">توقيع المختص &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; الختم الرسمي</div>
+<div class="signatures">
+  <div class="sig-box"><div class="sig-title">معد النموذج</div><div class="sig-line"></div></div>
+  <div class="sig-box"><div class="sig-title">رئيس القسم</div><div class="sig-line"></div></div>
+  <div class="sig-box"><div class="sig-title">المراجعة</div><div class="sig-line"></div></div>
+</div>
 <div class="footer"><span>نظام الحسابات المالية — ديوان الخدمة المدنية</span><span>تاريخ الطباعة: ${fmtLatnDate()}</span></div>
 </body></html>`;
 }
